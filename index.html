@@ -153,10 +153,8 @@
         showLoadingPopup();
 
         const fileInput = document.getElementById("imageUpload").files[0];
-        const reader = new FileReader();
 
-        reader.onloadend = function() {
-            const base64data = fileInput ? reader.result.split(',')[1] : '';
+        function submitData(base64data) {
             const data = {
                 department: document.getElementById("department").value,
                 machineName: document.getElementById("machineName").value,
@@ -181,23 +179,29 @@
             }).then(() => {
                 showSuccessPopup();
             }).catch(error => {
-                showErrorPopup(error);
+                showErrorPopup(error.message || 'ไม่สามารถส่งข้อมูลได้');
             });
-        };
+        }
 
-        if (fileInput) reader.readAsDataURL(fileInput);
-        else reader.onloadend();
+        if (fileInput) {
+            const reader = new FileReader();
+            reader.onloadend = function() {
+                submitData(reader.result.split(',')[1]);
+            };
+            reader.readAsDataURL(fileInput);
+        } else {
+            submitData('');
+        }
     });
 
     function scanQRCode() {
-        showCheckingMachineNumberPopup();
         liff.scanCodeV2().then(result => {
             let scannedValue = result.value.trim();
             if (scannedValue.includes('size150')) scannedValue = scannedValue.replace('size150', '');
             document.getElementById("machineNumber").value = scannedValue;
             fetchMachineData(scannedValue);
         }).catch(err => {
-            closeCheckingMachineNumberPopup();
+            console.error('QR scan error:', err);
             showErrorPopup('ไม่สามารถสแกน QR Code หรือบาร์โค้ดได้');
         });
     }
@@ -209,17 +213,22 @@
 
     liff.init({ liffId: "2006299650-nyMyMmdw" })
         .then(() => {
-            if (!liff.isLoggedIn()) liff.login();
-            else return liff.getProfile();
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return; // หยุด chain - รอ redirect
+            }
+            return liff.getProfile();
         })
         .then(profile => {
+            if (!profile) return; // กรณี login() ถูกเรียก
             userId = profile.userId;
             displayName = profile.displayName;
             pictureUrl = profile.pictureUrl;
             fetchUserDataOnStart(userId);
         })
         .catch(err => {
-            showErrorPopup('การเริ่มต้น LIFF ล้มเหลว');
+            console.error('LIFF init error:', err);
+            showErrorPopup('การเริ่มต้น LIFF ล้มเหลว: ' + (err.message || 'กรุณาเปิดผ่านแอป LINE'));
         });
 </script>
 
