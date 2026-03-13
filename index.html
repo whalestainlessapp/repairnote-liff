@@ -61,7 +61,7 @@
     <label for="reporterName">ผู้แจ้ง:</label>
     <input type="text" id="reporterName" required readonly>
 
-    <button type="submit" id="submitButton">ส่งข้อมูล</button>
+    <button type="submit" id="submitButton" disabled style="opacity:0.5;">กำลังเชื่อมต่อ LINE...</button>
 </form>
 
 <script>
@@ -224,6 +224,10 @@
             userId = profile.userId;
             displayName = profile.displayName;
             pictureUrl = profile.pictureUrl;
+            var btn = document.getElementById('submitButton');
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.textContent = 'ส่งข้อมูล';
             fetchUserDataOnStart(userId);
         })
         .catch(err => {
