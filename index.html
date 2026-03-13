@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>แจ้งซ่อมเครื่องจักร</title>
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@line/liff@2.22.3/dist/liff.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { font-size: 20px; }
@@ -213,43 +213,45 @@
 
     function initLiff(attempt) {
         attempt = attempt || 1;
-        liff.init({ liffId: "2006299650-nyMyMmdw" })
-            .then(() => {
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                    return;
-                }
-                return liff.getProfile();
-            })
-            .then(profile => {
-                if (!profile) return;
-                userId = profile.userId;
-                displayName = profile.displayName;
-                pictureUrl = profile.pictureUrl;
-                var btn = document.getElementById('submitButton');
-                btn.disabled = false;
-                btn.style.opacity = '1';
-                btn.textContent = 'ส่งข้อมูล';
-                fetchUserDataOnStart(userId);
-            })
-            .catch(err => {
-                console.error('LIFF init error (attempt ' + attempt + '):', err);
-                if (attempt < 3) {
-                    // retry: 1.5s, 3s
-                    setTimeout(function() { initLiff(attempt + 1); }, 1500 * attempt);
-                } else {
-                    Swal.fire({
-                        title: 'เกิดข้อผิดพลาด',
-                        text: 'การเริ่มต้น LIFF ล้มเหลว กรุณาปิดแล้วเปิดใหม่ผ่านแอป LINE',
-                        icon: 'error',
-                        confirmButtonText: 'ลองใหม่',
-                        showCancelButton: true,
-                        cancelButtonText: 'ปิด'
-                    }).then(result => {
-                        if (result.isConfirmed) initLiff(1);
-                    });
-                }
-            });
+        var delay = attempt === 1 ? 0 : 2000 * (attempt - 1);
+        setTimeout(function() {
+            liff.init({ liffId: "2006299650-nyMyMmdw", withLoginOnExternalBrowser: true })
+                .then(() => {
+                    if (!liff.isLoggedIn()) {
+                        liff.login();
+                        return;
+                    }
+                    return liff.getProfile();
+                })
+                .then(profile => {
+                    if (!profile) return;
+                    userId = profile.userId;
+                    displayName = profile.displayName;
+                    pictureUrl = profile.pictureUrl;
+                    var btn = document.getElementById('submitButton');
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.textContent = 'ส่งข้อมูล';
+                    fetchUserDataOnStart(userId);
+                })
+                .catch(err => {
+                    console.error('LIFF init error (attempt ' + attempt + '):', err);
+                    if (attempt < 4) {
+                        initLiff(attempt + 1);
+                    } else {
+                        Swal.fire({
+                            title: 'เกิดข้อผิดพลาด',
+                            text: 'การเริ่มต้น LIFF ล้มเหลว กรุณาปิดแล้วเปิดใหม่ผ่านแอป LINE',
+                            icon: 'error',
+                            confirmButtonText: 'ลองใหม่',
+                            showCancelButton: true,
+                            cancelButtonText: 'ปิด'
+                        }).then(result => {
+                            if (result.isConfirmed) initLiff(1);
+                        });
+                    }
+                });
+        }, delay);
     }
     initLiff();
 </script>
