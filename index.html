@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>แจ้งซ่อมเครื่องจักร</title>
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@line/liff@2.22.3/dist/liff.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { font-size: 20px; }
@@ -61,7 +61,7 @@
     <label for="reporterName">ผู้แจ้ง:</label>
     <input type="text" id="reporterName" required readonly>
 
-    <button type="submit" id="submitButton">ส่งข้อมูล</button>
+    <button type="submit" id="submitButton" disabled style="opacity:0.5;">กำลังเชื่อมต่อ LINE...</button>
 </form>
 
 <script>
@@ -106,7 +106,7 @@
 
     function fetchMachineData(machineNumber) {
         showCheckingMachineNumberPopup();
-        return fetch(`https://script.google.com/macros/s/AKfycbzkpaPRlQwfL41cy-BOaksc96xuiI_BetrVN5GzeSqMRcrgf3ALUqJj1zx3e1JQLP7jyA/exec?machineNumber=${machineNumber}`)
+        return fetch(`https://script.google.com/macros/s/AKfycbxqFIkEgoPf3nmphYB2RU3rt5BkTpI3nVSBWes7wcX5SMC8RjKMMgGIPq-BLm7pd3QlxA/exec?machineNumber=${machineNumber}`)
             .then(response => response.json())
             .then(data => {
                 closeCheckingMachineNumberPopup();
@@ -126,7 +126,7 @@
     }
 
     function fetchUserDataOnStart(userId) {
-        return fetch(`https://script.google.com/macros/s/AKfycbzkpaPRlQwfL41cy-BOaksc96xuiI_BetrVN5GzeSqMRcrgf3ALUqJj1zx3e1JQLP7jyA/exec?userId=${userId}`)
+        return fetch(`https://script.google.com/macros/s/AKfycbxqFIkEgoPf3nmphYB2RU3rt5BkTpI3nVSBWes7wcX5SMC8RjKMMgGIPq-BLm7pd3QlxA/exec?userId=${userId}`)
             .then(response => response.json())
             .then(data => {
                 if (data) {
@@ -153,10 +153,8 @@
         showLoadingPopup();
 
         const fileInput = document.getElementById("imageUpload").files[0];
-        const reader = new FileReader();
 
-        reader.onloadend = function() {
-            const base64data = fileInput ? reader.result.split(',')[1] : '';
+        function submitData(base64data) {
             const data = {
                 department: document.getElementById("department").value,
                 machineName: document.getElementById("machineName").value,
@@ -174,30 +172,36 @@
                 pictureUrl: pictureUrl
             };
 
-            fetch("https://script.google.com/macros/s/AKfycbzkpaPRlQwfL41cy-BOaksc96xuiI_BetrVN5GzeSqMRcrgf3ALUqJj1zx3e1JQLP7jyA/exec", {
+            fetch("https://script.google.com/macros/s/AKfycbxqFIkEgoPf3nmphYB2RU3rt5BkTpI3nVSBWes7wcX5SMC8RjKMMgGIPq-BLm7pd3QlxA/exec", {
                 method: "POST", mode: "no-cors",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data)
             }).then(() => {
                 showSuccessPopup();
             }).catch(error => {
-                showErrorPopup(error);
+                showErrorPopup(error.message || 'ไม่สามารถส่งข้อมูลได้');
             });
-        };
+        }
 
-        if (fileInput) reader.readAsDataURL(fileInput);
-        else reader.onloadend();
+        if (fileInput) {
+            const reader = new FileReader();
+            reader.onloadend = function() {
+                submitData(reader.result.split(',')[1]);
+            };
+            reader.readAsDataURL(fileInput);
+        } else {
+            submitData('');
+        }
     });
 
     function scanQRCode() {
-        showCheckingMachineNumberPopup();
         liff.scanCodeV2().then(result => {
             let scannedValue = result.value.trim();
             if (scannedValue.includes('size150')) scannedValue = scannedValue.replace('size150', '');
             document.getElementById("machineNumber").value = scannedValue;
             fetchMachineData(scannedValue);
         }).catch(err => {
-            closeCheckingMachineNumberPopup();
+            console.error('QR scan error:', err);
             showErrorPopup('ไม่สามารถสแกน QR Code หรือบาร์โค้ดได้');
         });
     }
@@ -207,19 +211,53 @@
         if (machineNumber) fetchMachineData(machineNumber);
     });
 
+    // liff.init() cannot be called more than once per page load.
+    // Use sessionStorage to count retries across page reloads instead.
+    var RETRY_KEY = 'liffRetryCount';
+    var attempt = parseInt(sessionStorage.getItem(RETRY_KEY) || '0');
+
     liff.init({ liffId: "2006299650-nyMyMmdw" })
         .then(() => {
-            if (!liff.isLoggedIn()) liff.login();
-            else return liff.getProfile();
+            sessionStorage.removeItem(RETRY_KEY);
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return;
+            }
+            return liff.getProfile();
         })
         .then(profile => {
+            if (!profile) return;
             userId = profile.userId;
             displayName = profile.displayName;
             pictureUrl = profile.pictureUrl;
+            var btn = document.getElementById('submitButton');
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.textContent = 'ส่งข้อมูล';
             fetchUserDataOnStart(userId);
         })
         .catch(err => {
-            showErrorPopup('การเริ่มต้น LIFF ล้มเหลว');
+            var errCode = (err && err.code) ? err.code : 'UNKNOWN';
+            console.error('LIFF init error (attempt ' + (attempt + 1) + '):', errCode, err);
+            if (attempt < 3) {
+                sessionStorage.setItem(RETRY_KEY, attempt + 1);
+                setTimeout(function() { location.reload(); }, 2000 * (attempt + 1));
+            } else {
+                sessionStorage.removeItem(RETRY_KEY);
+                Swal.fire({
+                    title: 'เกิดข้อผิดพลาด',
+                    html: 'การเริ่มต้น LIFF ล้มเหลว<br><small style="color:#999">(' + errCode + ')</small>',
+                    icon: 'error',
+                    confirmButtonText: 'ลองใหม่',
+                    showCancelButton: true,
+                    cancelButtonText: 'ปิด'
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        sessionStorage.removeItem(RETRY_KEY);
+                        location.reload();
+                    }
+                });
+            }
         });
 </script>
 
