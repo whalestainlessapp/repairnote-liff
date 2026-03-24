@@ -211,29 +211,37 @@
         if (machineNumber) fetchMachineData(machineNumber);
     });
 
-    var RETRY_KEY = 'liffRetryCount';
-    var attempt = parseInt(sessionStorage.getItem(RETRY_KEY) || '0');
-
-    function showLiffError(errCode) {
-        sessionStorage.removeItem(RETRY_KEY);
+    function enableFormWithoutLine() {
         var btn = document.getElementById('submitButton');
-        btn.textContent = 'เชื่อมต่อ LINE ไม่ได้ — กดเพื่อลองใหม่';
         btn.disabled = false;
         btn.style.opacity = '1';
-        btn.style.backgroundColor = '#e53935';
-        btn.onclick = function() { sessionStorage.removeItem(RETRY_KEY); location.reload(); };
-        console.error('LIFF init failed:', errCode);
+        btn.textContent = 'ส่งข้อมูล (ไม่ได้เชื่อมต่อ LINE)';
     }
 
-    // Fallback: ถ้า LIFF init ไม่เสร็จภายใน 12 วินาที ให้แสดง error
+    function notifyLiffFail(errCode) {
+        console.warn('LIFF unavailable:', errCode);
+        Swal.fire({
+            icon: 'warning',
+            title: 'เชื่อมต่อ LINE ไม่ได้',
+            text: 'ยังสามารถส่งแบบฟอร์มได้ แต่จะไม่มีข้อมูล LINE แนบมาด้วย',
+            confirmButtonText: 'ตกลง'
+        });
+        enableFormWithoutLine();
+    }
+
+    var liffDone = false;
     var liffTimeout = setTimeout(function() {
-        showLiffError('TIMEOUT');
-    }, 12000);
+        if (!liffDone) {
+            liffDone = true;
+            notifyLiffFail('TIMEOUT');
+        }
+    }, 10000);
 
     liff.init({ liffId: "2006299650-nyMyMmdw" })
         .then(() => {
+            if (liffDone) return; // timeout already fired
+            liffDone = true;
             clearTimeout(liffTimeout);
-            sessionStorage.removeItem(RETRY_KEY);
             if (!liff.isLoggedIn()) {
                 liff.login();
                 return;
@@ -252,15 +260,11 @@
             fetchUserDataOnStart(userId);
         })
         .catch(err => {
+            if (liffDone) return;
+            liffDone = true;
             clearTimeout(liffTimeout);
             var errCode = (err && err.code) ? err.code : 'UNKNOWN';
-            console.error('LIFF init error (attempt ' + (attempt + 1) + '):', errCode, err);
-            if (attempt < 2) {
-                sessionStorage.setItem(RETRY_KEY, attempt + 1);
-                setTimeout(function() { location.reload(); }, 2000);
-            } else {
-                showLiffError(errCode);
-            }
+            notifyLiffFail(errCode);
         });
 </script>
 
