@@ -211,49 +211,54 @@
         if (machineNumber) fetchMachineData(machineNumber);
     });
 
-    function initLiff(attempt) {
-        attempt = attempt || 1;
-        var delay = attempt === 1 ? 0 : 2000 * (attempt - 1);
-        setTimeout(function() {
-            liff.init({ liffId: "2006299650-nyMyMmdw", withLoginOnExternalBrowser: true })
-                .then(() => {
-                    if (!liff.isLoggedIn()) {
-                        liff.login();
-                        return;
-                    }
-                    return liff.getProfile();
-                })
-                .then(profile => {
-                    if (!profile) return;
-                    userId = profile.userId;
-                    displayName = profile.displayName;
-                    pictureUrl = profile.pictureUrl;
-                    var btn = document.getElementById('submitButton');
-                    btn.disabled = false;
-                    btn.style.opacity = '1';
-                    btn.textContent = 'ส่งข้อมูล';
-                    fetchUserDataOnStart(userId);
-                })
-                .catch(err => {
-                    console.error('LIFF init error (attempt ' + attempt + '):', err);
-                    if (attempt < 4) {
-                        initLiff(attempt + 1);
-                    } else {
-                        Swal.fire({
-                            title: 'เกิดข้อผิดพลาด',
-                            text: 'การเริ่มต้น LIFF ล้มเหลว กรุณาปิดแล้วเปิดใหม่ผ่านแอป LINE',
-                            icon: 'error',
-                            confirmButtonText: 'ลองใหม่',
-                            showCancelButton: true,
-                            cancelButtonText: 'ปิด'
-                        }).then(result => {
-                            if (result.isConfirmed) initLiff(1);
-                        });
+    // liff.init() cannot be called more than once per page load.
+    // Use sessionStorage to count retries across page reloads instead.
+    var RETRY_KEY = 'liffRetryCount';
+    var attempt = parseInt(sessionStorage.getItem(RETRY_KEY) || '0');
+
+    liff.init({ liffId: "2006299650-nyMyMmdw" })
+        .then(() => {
+            sessionStorage.removeItem(RETRY_KEY);
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return;
+            }
+            return liff.getProfile();
+        })
+        .then(profile => {
+            if (!profile) return;
+            userId = profile.userId;
+            displayName = profile.displayName;
+            pictureUrl = profile.pictureUrl;
+            var btn = document.getElementById('submitButton');
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.textContent = 'ส่งข้อมูล';
+            fetchUserDataOnStart(userId);
+        })
+        .catch(err => {
+            var errCode = (err && err.code) ? err.code : 'UNKNOWN';
+            console.error('LIFF init error (attempt ' + (attempt + 1) + '):', errCode, err);
+            if (attempt < 3) {
+                sessionStorage.setItem(RETRY_KEY, attempt + 1);
+                setTimeout(function() { location.reload(); }, 2000 * (attempt + 1));
+            } else {
+                sessionStorage.removeItem(RETRY_KEY);
+                Swal.fire({
+                    title: 'เกิดข้อผิดพลาด',
+                    html: 'การเริ่มต้น LIFF ล้มเหลว<br><small style="color:#999">(' + errCode + ')</small>',
+                    icon: 'error',
+                    confirmButtonText: 'ลองใหม่',
+                    showCancelButton: true,
+                    cancelButtonText: 'ปิด'
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        sessionStorage.removeItem(RETRY_KEY);
+                        location.reload();
                     }
                 });
-        }, delay);
-    }
-    initLiff();
+            }
+        });
 </script>
 
 </body>
