@@ -78,7 +78,7 @@
         Swal.fire({
             title: 'สำเร็จ', text: 'ส่งข้อมูลเรียบร้อยแล้ว', icon: 'success', confirmButtonText: 'ปิด',
             customClass: { popup: 'swal-popup-large' }
-        }).then(() => { liff.closeWindow(); });
+        }).then(() => { try { liff.closeWindow(); } catch(e) {} });
     }
 
     function showErrorPopup(error) {
@@ -139,7 +139,7 @@
                         Swal.fire({
                             title: 'กรุณาลงทะเบียน', text: 'ไม่พบข้อมูลแผนก กรุณาลงทะเบียนก่อน',
                             icon: 'warning', confirmButtonText: 'ตกลง'
-                        }).then(() => { liff.closeWindow(); });
+                        }).then(() => { try { liff.closeWindow(); } catch(e) {} });
                     }
                 }
             })
@@ -212,36 +212,22 @@
     });
 
     function enableFormWithoutLine() {
+        // ปลด readonly เพื่อให้กรอกได้ และปลด required เพื่อให้ submit ได้
+        var dept = document.getElementById('department');
+        var reporter = document.getElementById('reporterName');
+        dept.removeAttribute('readonly');
+        dept.removeAttribute('required');
+        reporter.removeAttribute('readonly');
+        reporter.removeAttribute('required');
+
         var btn = document.getElementById('submitButton');
         btn.disabled = false;
         btn.style.opacity = '1';
-        btn.textContent = 'ส่งข้อมูล (ไม่ได้เชื่อมต่อ LINE)';
+        btn.textContent = 'ส่งข้อมูล';
     }
-
-    function notifyLiffFail(errCode) {
-        console.warn('LIFF unavailable:', errCode);
-        Swal.fire({
-            icon: 'warning',
-            title: 'เชื่อมต่อ LINE ไม่ได้',
-            text: 'ยังสามารถส่งแบบฟอร์มได้ แต่จะไม่มีข้อมูล LINE แนบมาด้วย',
-            confirmButtonText: 'ตกลง'
-        });
-        enableFormWithoutLine();
-    }
-
-    var liffDone = false;
-    var liffTimeout = setTimeout(function() {
-        if (!liffDone) {
-            liffDone = true;
-            notifyLiffFail('TIMEOUT');
-        }
-    }, 10000);
 
     liff.init({ liffId: "2006299650-nyMyMmdw" })
         .then(() => {
-            if (liffDone) return; // timeout already fired
-            liffDone = true;
-            clearTimeout(liffTimeout);
             if (!liff.isLoggedIn()) {
                 liff.login();
                 return;
@@ -260,11 +246,15 @@
             fetchUserDataOnStart(userId);
         })
         .catch(err => {
-            if (liffDone) return;
-            liffDone = true;
-            clearTimeout(liffTimeout);
             var errCode = (err && err.code) ? err.code : 'UNKNOWN';
-            notifyLiffFail(errCode);
+            console.warn('LIFF init failed:', errCode, err);
+            Swal.fire({
+                icon: 'warning',
+                title: 'เชื่อมต่อ LINE ไม่ได้',
+                text: 'ยังสามารถส่งแบบฟอร์มได้ กรุณากรอกข้อมูลด้วยตนเอง',
+                confirmButtonText: 'ตกลง'
+            });
+            enableFormWithoutLine();
         });
 </script>
 
