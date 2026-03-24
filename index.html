@@ -19,7 +19,7 @@
             border-radius: 4px;
             box-sizing: border-box;
         }
- 
+
         button {
             width: 100%;
             background-color: #4CAF50;
@@ -30,11 +30,11 @@
             border-radius: 4px;
             cursor: pointer;
         }
- 
+
         button:hover {
             background-color: #45a049;
         }
- 
+
         .box-gray {
             border-radius: 5px;
             background-color: #f2f2f2;
@@ -42,15 +42,15 @@
             width: 50%;
             margin: 0 auto;
         }
- 
+
         h1 {
             text-align: center;
         }
- 
+
         label {
             font-weight: bold;
         }
- 
+
         .qr-scan-btn {
             background-color: #4CAF50;
             color: white;
@@ -63,47 +63,48 @@
     </style>
 </head>
 <body>
- 
+
 <h1>แจ้งซ่อมเครื่องจักร</h1>
 <form id="repairForm">
     <label for="department">แผนก:</label>
     <input type="text" id="department" name="department" placeholder="กรอกชื่อแผนก..." required readonly>
- 
+
     <label for="machineName">ชื่อเครื่องจักร:</label>
     <input type="text" id="machineName" name="machineName" placeholder="กรอกชื่อเครื่องจักร..." required readonly>
- 
+
     <label for="machineNumber">หมายเลขเครื่อง:</label>
     <input type="text" id="machineNumber" name="machineNumber" placeholder="หมายเลขเครื่องจักร..." required>
     <button type="button" class="qr-scan-btn" onclick="scanQRCode()">สแกน QR Code</button>
- 
+
     <label for="reporterName">ผู้แจ้ง:</label>
     <input type="text" id="reporterName" required readonly>
- 
+
     <label for="jobType">ลักษณะงาน:</label>
     <select id="jobType" name="jobType" required>
         <option value="">เลือก...</option>
         <option value="ด่วน">ด่วน</option>
         <option value="ไม่ด่วน">ไม่ด่วน</option>
     </select>
- 
+
     <label for="dueDate">ต้องการให้เสร็จภายใน:</label>
     <input type="date" id="dueDate" required>
- 
+
     <label for="issueDescription">รายละเอียด:</label>
     <textarea id="issueDescription" rows="5" name="รายละเอียด" placeholder="รายละเอียด..." required></textarea>
- 
+
     <label for="imageUpload">รูปรายละเอียด:</label>
     <input type="file" id="imageUpload" accept="image/*">
- 
+
     <button type="submit">ส่งข้อมูล</button>
 </form>
- 
+
 <script>
     let userId, displayName, pictureUrl;
- 
-    // ฟังก์ชันดึงข้อมูลจาก Google Sheet
-    function fetchUserData(userId, machineNumber) {
-        return fetch(`https://script.google.com/macros/s/AKfycbzkpaPRlQwfL41cy-BOaksc96xuiI_BetrVN5GzeSqMRcrgf3ALUqJj1zx3e1JQLP7jyA/exec?userId=${userId}&machineNumber=${machineNumber}`)
+
+    var GAS_URL = "https://script.google.com/macros/s/AKfycbzkpaPRlQwfL41cy-BOaksc96xuiI_BetrVN5GzeSqMRcrgf3ALUqJj1zx3e1JQLP7jyA/exec";
+
+    function fetchUserData(uid, machineNumber) {
+        return fetch(`${GAS_URL}?userId=${uid}&machineNumber=${machineNumber}`)
             .then(response => response.json())
             .catch(err => {
                 console.error("Error fetching data from Google Sheet", err);
@@ -115,15 +116,15 @@
                 });
             });
     }
- 
+
     document.getElementById("repairForm").addEventListener("submit", function(event) {
         event.preventDefault();
- 
+
         const fileInput = document.getElementById("imageUpload").files[0];
         const reader = new FileReader();
- 
+
         reader.onloadend = function() {
-            const base64data = fileInput ? reader.result.split(',')[1] : '';  // ตัด prefix ของ base64 ออกถ้ามีไฟล์
+            const base64data = fileInput ? reader.result.split(',')[1] : '';
             const data = {
                 department: document.getElementById("department").value,
                 machineName: document.getElementById("machineName").value,
@@ -139,14 +140,11 @@
                 displayName: displayName,
                 pictureUrl: pictureUrl
             };
- 
-            // ส่งข้อมูลไปยัง Google Apps Script
-            fetch("https://script.google.com/macros/s/AKfycbzkpaPRlQwfL41cy-BOaksc96xuiI_BetrVN5GzeSqMRcrgf3ALUqJj1zx3e1JQLP7jyA/exec", {
+
+            fetch(GAS_URL, {
                 method: "POST",
                 mode: "no-cors",
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data)
             }).then(() => {
                 Swal.fire({
@@ -154,12 +152,8 @@
                     text: 'ส่งข้อมูลเรียบร้อยแล้ว',
                     icon: 'success',
                     confirmButtonText: 'ปิด',
-                    customClass: {
-                        popup: 'swal-popup-large',  // ปรับขนาดหน้าต่าง
-                    }
-                }).then(() => {
-                    liff.closeWindow();  // ปิดหน้าต่าง LIFF
-                });
+                    customClass: { popup: 'swal-popup-large' }
+                }).then(() => { try { liff.closeWindow(); } catch(e) {} });
             }).catch(error => {
                 console.error("Error:", error);
                 Swal.fire({
@@ -170,38 +164,22 @@
                 });
             });
         };
- 
+
         if (fileInput) {
             reader.readAsDataURL(fileInput);
         } else {
             reader.onloadend();
         }
     });
- 
-    // เริ่มต้น LIFF
-    liff.init({ liffId: "2006299650-nyMyMmdw" })
-        .then(() => {
-            return liff.getProfile();
-        })
-        .then(profile => {
-            userId = profile.userId;
-            displayName = profile.displayName;
-            pictureUrl = profile.pictureUrl;
-            document.getElementById("reporterName").value = displayName;
- 
-            // ดึงข้อมูลจาก Google Sheet
-        fetchUserData(userId, document.getElementById("machineNumber").value).then(data => {
-            // แก้ไขตรงนี้: ใช้ค่า reporterName ที่ดึงมาจาก Google Sheet แทน displayName
-            document.getElementById("reporterName").value = data.reporterName;
-            document.getElementById("department").value = data.department;
-            document.getElementById("machineName").value = data.machineName;
-            });
-        })
-        .catch(err => {
-            console.error("LIFF initialization failed", err);
+
+    function enableFormWithoutLine() {
+        ['department', 'machineName', 'reporterName'].forEach(function(id) {
+            var el = document.getElementById(id);
+            el.removeAttribute('readonly');
+            el.removeAttribute('required');
         });
- 
-    // ฟังก์ชันสำหรับสแกน QR Code
+    }
+
     function scanQRCode() {
         liff.scanCodeV2().then(result => {
             let scannedValue = result.value.trim();
@@ -209,10 +187,8 @@
                 scannedValue = scannedValue.replace('size150', '');
             }
             document.getElementById("machineNumber").value = scannedValue;
- 
-            // หลังจากสแกน QR Code แล้วดึงข้อมูล machineName จาก Google Sheet
             fetchUserData(userId, scannedValue).then(data => {
-                document.getElementById("machineName").value = data.machineName;
+                if (data) document.getElementById("machineName").value = data.machineName;
             });
         }).catch(err => {
             Swal.fire({
@@ -223,7 +199,40 @@
             });
         });
     }
+
+    liff.init({ liffId: "2006299650-nyMyMmdw" })
+        .then(() => {
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return;
+            }
+            return liff.getProfile();
+        })
+        .then(profile => {
+            if (!profile) return;
+            userId = profile.userId;
+            displayName = profile.displayName;
+            pictureUrl = profile.pictureUrl;
+            document.getElementById("reporterName").value = displayName;
+            fetchUserData(userId, '').then(data => {
+                if (data) {
+                    document.getElementById("reporterName").value = data.reporterName || displayName;
+                    document.getElementById("department").value = data.department || '';
+                }
+            });
+        })
+        .catch(err => {
+            var errCode = (err && err.code) ? err.code : 'UNKNOWN';
+            console.warn('LIFF init failed:', errCode, err);
+            Swal.fire({
+                icon: 'warning',
+                title: 'เชื่อมต่อ LINE ไม่ได้',
+                text: 'ยังสามารถส่งแบบฟอร์มได้ กรุณากรอกข้อมูลด้วยตนเอง',
+                confirmButtonText: 'ตกลง'
+            });
+            enableFormWithoutLine();
+        });
 </script>
- 
+
 </body>
 </html>
