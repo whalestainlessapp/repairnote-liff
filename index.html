@@ -100,6 +100,7 @@
 
 <script>
     let userId, displayName, pictureUrl;
+    let isSubmitting = false;
 
     var GAS_URL = "https://script.google.com/macros/s/AKfycbzkpaPRlQwfL41cy-BOaksc96xuiI_BetrVN5GzeSqMRcrgf3ALUqJj1zx3e1JQLP7jyA/exec";
 
@@ -119,6 +120,19 @@
 
     document.getElementById("repairForm").addEventListener("submit", function(event) {
         event.preventDefault();
+
+        if (isSubmitting) return;
+        isSubmitting = true;
+
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'กำลังส่ง...';
+
+        Swal.fire({
+            title: 'กำลังส่งข้อมูล...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
 
         const fileInput = document.getElementById("imageUpload").files[0];
         const reader = new FileReader();
@@ -147,6 +161,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data)
             }).then(() => {
+                isSubmitting = false;
                 Swal.fire({
                     title: 'สำเร็จ',
                     text: 'ส่งข้อมูลเรียบร้อยแล้ว',
@@ -156,6 +171,9 @@
                 }).then(() => { try { liff.closeWindow(); } catch(e) {} });
             }).catch(error => {
                 console.error("Error:", error);
+                isSubmitting = false;
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'ส่งข้อมูล';
                 Swal.fire({
                     title: 'เกิดข้อผิดพลาด',
                     text: 'ไม่สามารถส่งข้อมูลได้',
