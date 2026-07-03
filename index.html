@@ -70,7 +70,7 @@
     <input type="text" id="department" name="department" placeholder="กรอกชื่อแผนก..." required readonly>
 
     <label for="machineName">ชื่อเครื่องจักร:</label>
-    <input type="text" id="machineName" name="machineName" placeholder="กรอกชื่อเครื่องจักร..." required readonly>
+    <input type="text" id="machineName" name="machineName" placeholder="กรอกชื่อเครื่องจักร หรือสแกน/กรอกหมายเลขเครื่องเพื่อค้นหาอัตโนมัติ..." required>
 
     <label for="machineNumber">หมายเลขเครื่อง:</label>
     <input type="text" id="machineNumber" name="machineNumber" placeholder="หมายเลขเครื่องจักร..." required>
@@ -88,6 +88,9 @@
 
     <label for="dueDate">ต้องการให้เสร็จภายใน:</label>
     <input type="date" id="dueDate" required>
+
+    <label for="location">สถานที่:</label>
+    <input type="text" id="location" name="location" placeholder="กรุณาระบุสถานที่...." required>
 
     <label for="issueDescription">รายละเอียด:</label>
     <textarea id="issueDescription" rows="5" name="รายละเอียด" placeholder="รายละเอียด..." required></textarea>
@@ -135,10 +138,46 @@
         });
 
         const fileInput = document.getElementById("imageUpload").files[0];
-        const reader = new FileReader();
 
-        reader.onloadend = function() {
-            const base64data = fileInput ? reader.result.split(',')[1] : '';
+        // ย่อรูปก่อนส่ง เพื่อลดเวลาอัพโหลด (จำกัดด้านยาวสุด 1280px, JPEG คุณภาพ 70%)
+        function compressImage(file) {
+            return new Promise(function(resolve) {
+                const reader = new FileReader();
+                reader.onload = function() {
+                    const img = new Image();
+                    img.onload = function() {
+                        const MAX_SIZE = 1280;
+                        let w = img.width, h = img.height;
+                        if (w > MAX_SIZE || h > MAX_SIZE) {
+                            if (w > h) { h = Math.round(h * MAX_SIZE / w); w = MAX_SIZE; }
+                            else { w = Math.round(w * MAX_SIZE / h); h = MAX_SIZE; }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                        resolve({
+                            base64: dataUrl.split(',')[1],
+                            mimeType: 'image/jpeg',
+                            fileName: file.name.replace(/\.[^.]+$/, '') + '.jpg'
+                        });
+                    };
+                    // ถ้าอ่านรูปไม่ได้ ให้ส่งไฟล์เดิมแทน
+                    img.onerror = function() {
+                        resolve({
+                            base64: reader.result.split(',')[1],
+                            mimeType: file.type,
+                            fileName: file.name
+                        });
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function buildAndSend(fileInfo) {
+            const base64data = fileInfo ? fileInfo.base64 : '';
             const data = {
                 department: document.getElementById("department").value,
                 machineName: document.getElementById("machineName").value,
@@ -146,9 +185,10 @@
                 reporterName: document.getElementById("reporterName").value,
                 jobType: document.getElementById("jobType").value,
                 dueDate: document.getElementById("dueDate").value,
+                location: document.getElementById("location").value,
                 issueDescription: document.getElementById("issueDescription").value,
-                fileName: fileInput ? fileInput.name : '',
-                mimeType: fileInput ? fileInput.type : '',
+                fileName: fileInfo ? fileInfo.fileName : '',
+                mimeType: fileInfo ? fileInfo.mimeType : '',
                 fileData: base64data,
                 userId: userId,
                 displayName: displayName,
@@ -181,12 +221,12 @@
                     confirmButtonText: 'ตกลง'
                 });
             });
-        };
+        }
 
         if (fileInput) {
-            reader.readAsDataURL(fileInput);
+            compressImage(fileInput).then(buildAndSend);
         } else {
-            reader.onloadend();
+            buildAndSend(null);
         }
     });
 
@@ -198,6 +238,38 @@
         });
     }
 
+    // ค้นหาชื่อเครื่องจักรจากหมายเลขเครื่อง (ใช้ทั้งจาก QR scan และพิมพ์เอง)
+    function lookupMachine(machineNumber) {
+        Swal.fire({
+            title: 'กำลังตรวจสอบ...',
+            text: 'กำลังค้นหาชื่อเครื่องจักร กรุณารอสักครู่',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+        return fetchUserData(userId || '', machineNumber).then(data => {
+            Swal.close();
+            const machineNameEl = document.getElementById("machineName");
+            if (data && data.machineName) {
+                machineNameEl.value = data.machineName;
+                machineNameEl.readOnly = true;
+            } else {
+                machineNameEl.value = '';
+                machineNameEl.readOnly = false;
+                Swal.fire({
+                    title: 'ไม่พบหมายเลขเครื่อง',
+                    text: 'กรุณากรอกชื่อเครื่องจักรด้วยตนเอง',
+                    icon: 'info',
+                    confirmButtonText: 'ตกลง'
+                });
+            }
+        });
+    }
+
+    document.getElementById("machineNumber").addEventListener('change', function() {
+        const machineNumber = this.value.trim();
+        if (machineNumber) lookupMachine(machineNumber);
+    });
+
     function scanQRCode() {
         liff.scanCodeV2().then(result => {
             let scannedValue = result.value.trim();
@@ -205,9 +277,7 @@
                 scannedValue = scannedValue.replace('size150', '');
             }
             document.getElementById("machineNumber").value = scannedValue;
-            fetchUserData(userId, scannedValue).then(data => {
-                if (data) document.getElementById("machineName").value = data.machineName;
-            });
+            lookupMachine(scannedValue);
         }).catch(err => {
             Swal.fire({
                 title: 'เกิดข้อผิดพลาด',
