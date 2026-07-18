@@ -197,6 +197,63 @@
             });
     }
 
+    // ส่งการ์ด Flex ยืนยันเข้าห้องแชทด้วย liff.sendMessages() — ฟรี ไม่กิน quota push
+    // ถ้าเงื่อนไขไม่ครบ (เปิดนอกแอป LINE / ไม่ได้เปิดจากห้องแชท) จะข้ามเงียบๆ ไม่กระทบ flow หลัก
+    async function sendConfirmationCard(d, jobId, imgUrl) {
+        try {
+            if (!liff.isInClient()) return false;
+            const ctx = liff.getContext();
+            if (!ctx || !['utou', 'room', 'group'].includes(ctx.type)) return false;
+
+            const row = (label, value) => ({
+                type: 'box', layout: 'baseline', spacing: 'sm',
+                contents: [
+                    { type: 'text', text: label, size: 'sm', color: '#94a3b8', flex: 3 },
+                    { type: 'text', text: value || '-', size: 'sm', color: '#334155', flex: 5, wrap: true }
+                ]
+            });
+
+            const bubble = {
+                type: 'bubble',
+                header: {
+                    type: 'box', layout: 'vertical', backgroundColor: '#1e3a5f', paddingAll: '16px',
+                    contents: [
+                        { type: 'text', text: '✅ บันทึกใบแจ้งซ่อมสำเร็จ' + (jobId ? ' — Job ' + jobId : ''),
+                          color: '#ffffff', weight: 'bold', size: 'md', wrap: true }
+                    ]
+                },
+                body: {
+                    type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '16px',
+                    contents: [
+                        row('แผนก', d.department),
+                        row('สถานที่', d.location),
+                        row('ชื่อเครื่องจักร', d.machineName),
+                        row('หมายเลขเครื่อง', d.machineNumber),
+                        row('ลักษณะงาน', d.jobType),
+                        row('วันที่ต้องการ', d.dueDate),
+                        row('ผู้แจ้ง', d.reporterName),
+                        { type: 'separator', margin: 'md' },
+                        { type: 'text', text: 'รายละเอียด: ' + (d.issueDescription || '-'),
+                          wrap: true, size: 'sm', color: '#475569', margin: 'md' }
+                    ]
+                }
+            };
+            if (imgUrl) {
+                bubble.hero = { type: 'image', url: imgUrl, size: 'full', aspectRatio: '20:13', aspectMode: 'cover' };
+            }
+
+            await liff.sendMessages([{
+                type: 'flex',
+                altText: 'บันทึกใบแจ้งซ่อมสำเร็จ' + (jobId ? ' Job ' + jobId : ''),
+                contents: bubble
+            }]);
+            return true;
+        } catch (err) {
+            console.warn('sendMessages failed (skipped):', err);
+            return false; // ห้าม throw — ไม่ให้กระทบการบันทึกข้อมูล
+        }
+    }
+
     document.getElementById("repairForm").addEventListener("submit", function(event) {
         event.preventDefault();
 
@@ -271,11 +328,19 @@
                 pictureUrl: pictureUrl
             };
 
+            // ใช้ text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script ไม่รองรับ
+            // (ฝั่ง GAS ยัง JSON.parse(e.postData.contents) ได้เหมือนเดิม)
             fetch(GAS_URL, {
                 method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify(data)
+            }).then(response => response.json())
+            .then(result => {
+                if (!result || result.status !== 'success') {
+                    throw new Error((result && result.message) || 'บันทึกข้อมูลไม่สำเร็จ');
+                }
+                // ส่งการ์ดยืนยันเข้าห้องแชทในนามผู้ใช้ (ไม่กิน quota push)
+                return sendConfirmationCard(data, result.jobId || '', result.fileUrl || '');
             }).then(() => {
                 isSubmitting = false;
                 Swal.fire({
@@ -292,7 +357,7 @@
                 submitBtn.textContent = 'ส่งข้อมูล';
                 Swal.fire({
                     title: 'เกิดข้อผิดพลาด',
-                    text: 'ไม่สามารถส่งข้อมูลได้',
+                    text: error.message || 'ไม่สามารถส่งข้อมูลได้',
                     icon: 'error',
                     confirmButtonText: 'ตกลง'
                 });
